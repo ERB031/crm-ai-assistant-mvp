@@ -1,0 +1,463 @@
+// schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Global enums
+enum DealStage { lead qualified proposal negotiation won lost }
+enum TaskStatus { todo in_progress blocked done archived }
+enum InteractionType { email call note meeting }
+enum AiDraftKind { email note summary }
+enum TargetType { contact deal project task }
+enum RunStatus { success failed skipped }
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  users              User[]
+  roles              Role[]
+  accounts           Account[]
+  contacts           Contact[]
+  deals              Deal[]
+  interactions       Interaction[]
+  projects           Project[]
+  tasks              Task[]
+  taskComments       TaskComment[]
+  aiDrafts           AiDraft[]
+  aiActions          AiAction[]
+  workSessions       WorkSession[]
+  breakEvents        BreakEvent[]
+  dailyPriorities    DailyPriority[]
+  completionSignals  CompletionSignal[]
+  externalAccounts   ExternalAccount[]
+  calendarEvents     CalendarEvent[]
+  documents          Document[]
+  notifications      Notification[]
+  automationRules    AutomationRule[]
+  automationRuns     AutomationRun[]
+  auditLog           AuditLog[]
+  webhookOutbox      WebhookOutbox[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  tenantId  String
+  email     String
+  fullName  String
+  timezone  String   @default("UTC")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  roles    UserRole[]
+  tasks    Task[]        @relation("UserTasks")
+  sessions WorkSession[]
+  breaks   BreakEvent[]
+  dailies  DailyPriority[]
+  dones    CompletionSignal[]
+  extAccts ExternalAccount[]
+  calEvents CalendarEvent[]
+  notifs   Notification[]
+  comments TaskComment[] @relation("UserComments")
+  drafts   AiDraft[]     @relation("DraftAuthor")
+  audits   AuditLog[]    @relation("AuditActor")
+
+  @@unique([tenantId, email])
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  users     UserRole[]
+
+  @@unique([tenantId, name])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model Account {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  ownerUserId String?
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  owner   User?  @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  contacts Contact[]
+  deals    Deal[]
+
+  @@unique([tenantId, name], map: "accounts_tenant_name_uk")
+  @@index([tenantId])
+}
+
+model Contact {
+  id          String   @id @default(uuid())
+  tenantId    String
+  accountId   String?
+  firstName   String?
+  lastName    String?
+  email       String?
+  phone       String?
+  ownerUserId String?
+  lifecycleStage String?
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  account Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  owner   User?   @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  deals   Deal[]
+  logs    Interaction[]
+
+  @@index([tenantId])
+  @@index([ownerUserId])
+}
+
+model Deal {
+  id         String     @id @default(uuid())
+  tenantId   String
+  contactId  String?
+  accountId  String?
+  title      String
+  stage      DealStage  @default(lead)
+  amount     Decimal?
+  closeDate  DateTime?
+  pipelineId String?
+  isDeleted  Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  account Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  interactions Interaction[]
+  projects     Project[]
+
+  @@index([tenantId, stage])
+}
+
+model Interaction {
+  id                 String          @id @default(uuid())
+  tenantId           String
+  type               InteractionType
+  subject            String?
+  body               String?
+  contactId          String?
+  dealId             String?
+  direction          String?         // inbound | outbound
+  externalMessageId  String?
+  occurredAt         DateTime        @default(now())
+  isDeleted          Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  deal    Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, occurredAt(sort: Desc)])
+}
+
+model Project {
+  id         String   @id @default(uuid())
+  tenantId   String
+  name       String
+  dealId     String?
+  status     String   @default("active") // active|paused|completed|archived
+  startDate  DateTime?
+  dueDate    DateTime?
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  deal   Deal?  @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  tasks  Task[]
+  docs   Document[]
+
+  @@index([tenantId])
+}
+
+model Task {
+  id            String     @id @default(uuid())
+  tenantId      String
+  projectId     String?
+  title         String
+  description   String?
+  status        TaskStatus @default(todo)
+  priority      Int?
+  assigneeUserId String?
+  dueAt         DateTime?
+  source        String     @default("manual") // manual|ai|automation
+  isDeleted     Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assignee  User?  @relation("UserTasks", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  comments  TaskComment[]
+  events    CalendarEvent[]
+
+  @@index([tenantId, status])
+  @@index([assigneeUserId, dueAt])
+}
+
+model TaskComment {
+  id           String   @id @default(uuid())
+  tenantId     String
+  taskId       String
+  authorUserId String?
+  body         String
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User?  @relation("UserComments", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+}
+
+model AiDraft {
+  id            String      @id @default(uuid())
+  tenantId      String
+  kind          AiDraftKind
+  targetType    TargetType
+  targetId      String?
+  inputContext  Json?
+  output        String?
+  confidence    Decimal?
+  userEditState String?     // accepted|edited|discarded
+  createdBy     String?
+  createdAt     DateTime    @default(now())
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  author  User?  @relation("DraftAuthor", fields: [createdBy], references: [id], onDelete: SetNull)
+  actions AiAction[]
+}
+
+model AiAction {
+  id        String   @id @default(uuid())
+  tenantId  String
+  draftId   String
+  action    String   // created_task|sent_email|...
+  result    Json?
+  createdAt DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  draft  AiDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@index([draftId])
+}
+
+model WorkSession {
+  id           String   @id @default(uuid())
+  tenantId     String
+  userId       String
+  startedAt    DateTime
+  endedAt      DateTime?
+  intensityScore Int?
+  appFocusPct  Int?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+}
+
+model BreakEvent {
+  id           String   @id @default(uuid())
+  tenantId     String
+  userId       String
+  recommendedAt DateTime?
+  takenAt      DateTime?
+  durationMin  Int?
+  compliance   Boolean?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DailyPriority {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  forDate   DateTime
+  notes     String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, forDate])
+}
+
+model CompletionSignal {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  forDate   DateTime
+  method    String   // button|auto
+  thresholdSnapshot Json?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, forDate])
+}
+
+model ExternalAccount {
+  id          String   @id @default(uuid())
+  tenantId    String
+  userId      String
+  provider    String   // google
+  scopes      String[]
+  refreshToken String?
+  accessToken String?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, provider])
+}
+
+model CalendarEvent {
+  id               String   @id @default(uuid())
+  tenantId         String
+  userId           String
+  externalEventId  String?
+  startsAt         DateTime
+  endsAt           DateTime
+  summary          String?
+  linkedTaskId     String?
+  createdAt        DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task   Task?  @relation(fields: [linkedTaskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, startsAt])
+}
+
+model Document {
+  id         String   @id @default(uuid())
+  tenantId   String
+  provider   String   // drive
+  fileId     String
+  url        String
+  title      String?
+  mimeType   String?
+  linkedType String?  // contact|project|deal|task
+  linkedId   String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  kind      String
+  payload   Json?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AutomationRule {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  trigger   Json
+  condition Json?
+  action    Json
+  enabled   Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  runs   AutomationRun[]
+}
+
+model AutomationRun {
+  id         String    @id @default(uuid())
+  tenantId   String
+  ruleId     String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  status     RunStatus @default(success)
+  result     Json?
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  rule   AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  tenantId    String
+  actorUserId String?
+  action      String
+  subjectType String
+  subjectId   String?
+  before      Json?
+  after       Json?
+  occurredAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  actor  User?  @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, occurredAt(sort: Desc)])
+}
+
+model WebhookOutbox {
+  id             String   @id @default(uuid())
+  tenantId       String
+  destination    String
+  eventType      String
+  payload        Json
+  idempotencyKey String
+  nextAttemptAt  DateTime @default(now())
+  attempts       Int      @default(0)
+  lastError      String?
+  createdAt      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, idempotencyKey])
+}
