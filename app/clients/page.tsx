@@ -42,4 +42,7 @@ export default async function ClientsPage() {
       )}
     </main>
   );
+  export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 }

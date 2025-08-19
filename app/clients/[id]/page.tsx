@@ -55,4 +55,7 @@ export default async function ClientDetail({ params }: { params: { id: string } 
       )}
     </main>
   );
+  export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 }
