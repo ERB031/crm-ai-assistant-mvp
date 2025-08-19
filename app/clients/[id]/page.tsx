@@ -9,5 +9,5 @@ export default async function ClientDetail({ params }: { params: { id: string } 
     where: { id: params.id },
     include: { projects: { include: { tasks: true } }, notes: true },
   });
-  …
+  // ...
 }
