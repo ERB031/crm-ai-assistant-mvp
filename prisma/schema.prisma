@@ -1,58 +1,100 @@
+// prisma/schema.prisma
+
+// ---------- Generator ----------
 generator client {
   provider = "prisma-client-js"
 }
 
+// ---------- Datasource ----------
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  url       = env("DATABASE_URL")  // pooled (PgBouncer) URL
+  directUrl = env("DIRECT_URL")    // direct 5432 URL for migrations
 }
 
+// ---------- Enums ----------
 enum DealStage {
-  LEAD
-  QUALIFIED
-  PROPOSAL
-  WON
-  LOST
+  lead
+  qualified
+  proposal
+  negotiation
+  won
+  lost
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  blocked
+  done
+  archived
+}
+
+enum InteractionType {
+  email
+  call
+  note
+  meeting
+}
+
+enum AiDraftKind {
+  email
+  note
+  summary
+}
+
+enum TargetType {
+  contact
+  deal
+  project
+  task
+}
+
+enum RunStatus {
+  success
+  failed
+  skipped
+}
+
+// ---------- Models ----------
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clients   Client[]
+  projects  Project[]
+  tasks     Task[]
+  notes     Note[]
+  webhooks  WebhookOutbox[]
+
+  @@unique([name])
 }
 
 model Client {
   id        String    @id @default(uuid())
+  tenantId  String
   name      String
   email     String?
   phone     String?
-  stage     DealStage
-  projects  Project[]
-  notes     Note[]
+  address   String?      // added
+  birthday  DateTime?    // added
+  stage     DealStage    @default(lead)
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  // Relations
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projects  Project[]
+  notes     Note[]
+
+  @@index([tenantId])
+  @@index([stage])
+  @@unique([tenantId, name])
 }
 
 model Project {
-  id        String   @id @default(uuid())
-  clientId  String
-  client    Client   @relation(fields: [clientId], references: [id])
-  name      String
-  tasks     Task[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Task {
-  id        String   @id @default(uuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id])
-  title     String
-  done      Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Note {
-  id        String   @id @default(uuid())
-  clientId  String
-  client    Client   @relation(fields: [clientId], references: [id])
-  body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+  id        String    @i
