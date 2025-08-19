@@ -29,6 +29,9 @@
     "**/*.tsx"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "prisma/**/*.ts",
+    "node_modules",
+    ".next"
   ]
 }
