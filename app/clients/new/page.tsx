@@ -1,6 +1,9 @@
 import { redirect } from 'next/navigation';
 import { prisma } from '../../../lib/prisma';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export default function NewClientPage() {
   return (
     <main className="p-6 space-y-6">
@@ -72,3 +75,12 @@ async function createClient(formData: FormData) {
 
   redirect('/clients');
 }
+
+// app/clients/new/page.tsx
+export const runtime = 'nodejs';           // 👈 force Node (Prisma-safe)
+export const dynamic = 'force-dynamic';    // 👈 disable static caching if you read DB
+
+export default function NewClientPage() {
+  return <div>Add Client</div>;
+}
+
