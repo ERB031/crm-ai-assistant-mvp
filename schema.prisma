@@ -9,12 +9,48 @@ datasource db {
 }
 
 /// Global enums
-enum DealStage { lead qualified proposal negotiation won lost }
-enum TaskStatus { todo in_progress blocked done archived }
-enum InteractionType { email call note meeting }
-enum AiDraftKind { email note summary }
-enum TargetType { contact deal project task }
-enum RunStatus { success failed skipped }
+enum DealStage {
+  lead
+  qualified
+  proposal
+  negotiation
+  won
+  lost
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  blocked
+  done
+  archived
+}
+
+enum InteractionType {
+  email
+  call
+  note
+  meeting
+}
+
+enum AiDraftKind {
+  email
+  note
+  summary
+}
+
+enum TargetType {
+  contact
+  deal
+  project
+  task
+}
+
+enum RunStatus {
+  success
+  failed
+  skipped
+}
 
 model Tenant {
   id        String   @id @default(uuid())
@@ -23,6 +59,7 @@ model Tenant {
 
   users              User[]
   roles              Role[]
+  clients            Client[]
   accounts           Account[]
   contacts           Contact[]
   deals              Deal[]
@@ -460,23 +497,24 @@ model WebhookOutbox {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   @@unique([tenantId, idempotencyKey])
+}
 
-  model Client {
+model Client {
   id        String   @id @default(uuid())
+  tenantId  String
   name      String
   email     String?
   phone     String?
-  stage     DealStage
-
-  // NEW
+  stage     DealStage @default(lead)
   address   String?
   birthday  DateTime?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  projects  Project[]
-  notes     Note[]
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  
+  @@index([tenantId])
+  @@index([stage])
+  @@unique([tenantId, name])
 }
 
-}
