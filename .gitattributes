@@ -1,0 +1,3 @@
+# Keep Prisma/SQL files as LF in repo
+*.prisma text eol=lf
+*.sql    text eol=lf

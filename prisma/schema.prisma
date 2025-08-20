@@ -1,100 +1,149 @@
-// prisma/schema.prisma
-
-// ---------- Generator ----------
-generator client {
-  provider = "prisma-client-js"
-}
-
-// ---------- Datasource ----------
-datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")  // pooled (PgBouncer) URL
-  directUrl = env("DIRECT_URL")    // direct 5432 URL for migrations
-}
-
-// ---------- Enums ----------
-enum DealStage {
-  lead
-  qualified
-  proposal
-  negotiation
-  won
-  lost
-}
-
-enum TaskStatus {
-  todo
-  in_progress
-  blocked
-  done
-  archived
-}
-
-enum InteractionType {
-  email
-  call
-  note
-  meeting
-}
-
-enum AiDraftKind {
-  email
-  note
-  summary
-}
-
-enum TargetType {
-  contact
-  deal
-  project
-  task
-}
-
-enum RunStatus {
-  success
-  failed
-  skipped
-}
-
-// ---------- Models ----------
-model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  clients   Client[]
-  projects  Project[]
-  tasks     Task[]
-  notes     Note[]
-  webhooks  WebhookOutbox[]
-
-  @@unique([name])
-}
-
-model Client {
-  id        String    @id @default(uuid())
-  tenantId  String
-  name      String
-  email     String?
-  phone     String?
-  address   String?      // added
-  birthday  DateTime?    // added
-  stage     DealStage    @default(lead)
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  // Relations
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  projects  Project[]
-  notes     Note[]
-
-  @@index([tenantId])
-  @@index([stage])
-  @@unique([tenantId, name])
-}
-
-model Project {
-  id        String    @i
+ // prisma/schema.prisma
+ 
+ // ---------- Generator ----------
+ generator client {
+   provider = "prisma-client-js"
+ }
+ 
+ // ---------- Datasource ----------
+ datasource db {
+   provider  = "postgresql"
+-  url       = env("DATABASE_URL")  // pooled (PgBouncer) URL
+-  directUrl = env("DIRECT_URL")    // direct 5432 URL for migrations
++  url       = env("DATABASE_URL") // pooled (PgBouncer) URL
++  directUrl = env("DIRECT_URL") // direct 5432 URL for migrations
+ }
+ 
+ // ---------- Enums ----------
+ enum DealStage {
+-  lead
+-  qualified
+-  proposal
+-  negotiation
+-  won
+-  lost
++  LEAD
++  QUALIFIED
++  PROPOSAL
++  WON
++  LOST
+ }
+ 
+-enum TaskStatus {
+-  todo
+-  in_progress
+-  blocked
+-  done
+-  archived
+-}
++// ---------- Models ----------
++model Client {
++  id        String    @id @default(uuid())
++  name      String
++  email     String?
++  phone     String?
++  address   String?
++  birthday  DateTime?
++  stage     DealStage @default(LEAD)
++  createdAt DateTime  @default(now())
++  updatedAt DateTime  @updatedAt
+ 
+-enum InteractionType {
+-  email
+-  call
+-  note
+-  meeting
+-}
++  projects Project[]
++  notes    Note[]
+ 
+-enum AiDraftKind {
+-  email
+-  note
+-  summary
++  @@unique([name])
+ }
+ 
+-enum TargetType {
+-  contact
+-  deal
+-  project
+-  task
+-}
++model Project {
++  id        String   @id @default(uuid())
++  clientId  String
++  name      String
++  createdAt DateTime @default(now())
++  updatedAt DateTime @updatedAt
+ 
+-enum RunStatus {
+-  success
+-  failed
+-  skipped
++  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
++  tasks  Task[]
++  notes  Note[]
++
++  @@index([clientId])
+ }
+ 
+-// ---------- Models ----------
+-model Tenant {
++model Task {
+   id        String   @id @default(uuid())
+-  name      String
++  projectId String
++  title     String
++  done      Boolean  @default(false)
+   createdAt DateTime @default(now())
+   updatedAt DateTime @updatedAt
+ 
+-  // Relations
+-  clients   Client[]
+-  projects  Project[]
+-  tasks     Task[]
+-  notes     Note[]
+-  webhooks  WebhookOutbox[]
++  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+ 
+-  @@unique([name])
++  @@index([projectId])
+ }
+ 
+-model Client {
+-  id        String    @id @default(uuid())
+-  tenantId  String
+-  name      String
+-  email     String?
+-  phone     String?
+-  address   String?      // added
+-  birthday  DateTime?    // added
+-  stage     DealStage    @default(lead)
+-
+-  createdAt DateTime  @default(now())
+-  updatedAt DateTime  @updatedAt
++model Note {
++  id        String   @id @default(uuid())
++  clientId  String
++  projectId String?
++  body      String
++  createdAt DateTime @default(now())
++  updatedAt DateTime @updatedAt
+ 
+-  // Relations
+-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+-  projects  Project[]
+-  notes     Note[]
++  client  Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
++  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+ 
+-  @@index([tenantId])
+-  @@index([stage])
+-  @@unique([tenantId, name])
++  @@index([clientId])
++  @@index([projectId])
+ }
+-
+-model Project {
+-  id        String    @i
